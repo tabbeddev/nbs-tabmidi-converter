@@ -1,9 +1,9 @@
+from base84numbers import convert_84
 from typing import TypedDict
 from pathlib import Path
 import pynbs
 import argparse
 
-NUMBERS_LOOKUP = "0123456789abcdefghijklmnopqrstuvwxyzâĉêĝĥîĵôŝûŵŷẑáćéǵíjḱĺḿńóṕŕ!§%&/()=?{[]}+*-,.;:_#"
 INSTRUMENT_LOOKUP = {
     0: 1,
     1: 6,
@@ -34,7 +34,7 @@ class MyInstrument(TypedDict):
 
 def get_mapped_instrument(instr: int):
     if instr > 15:
-        return 0
+        return unknown_instrument
     return INSTRUMENT_LOOKUP[instr]
 
 
@@ -72,7 +72,7 @@ def insert_note(instrument: MyInstrument, tick: int, key: int):
         print(f"Lower limit hit with {note} on tick {tick}")
         while note < 0:
             note += 12
-    instrument["notes"][tick] = NUMBERS_LOOKUP[note]
+    instrument["notes"][tick] = convert_84(note)
 
 
 tracks: list[MyInstrument] = []
@@ -100,10 +100,23 @@ parser.add_argument(
     help="Cut off the song prematurely at tick x. Use when the song wouldn't fit fully in the editor",
 )
 parser.add_argument(
+    "-u",
+    "--unknown-instrument",
+    type=int,
+    help="Assign custom instruments a scratch instrument. Default is 20",
+)
+parser.add_argument(
     "-v",
     "--volume",
     type=float,
-    help="Multiplies the volume by this factor. Use when the result is way too loud.",
+    help="Multiplies the volume by this factor. Use when the result is way too loud",
+)
+parser.add_argument(
+    "-C",
+    "--no-compression",
+    action="store_false",
+    default=True,
+    help="Skips compression. Generally not recommended",
 )
 parser.add_argument("path", type=Path, help="The nbs file to convert to")
 
@@ -113,6 +126,8 @@ transpose_factor: int = (args.transpose or 0) * 12
 hold_time: float = args.hold or 0.25
 volume_factor: float = args.volume or 1
 cut_off: int | None = args.limit
+compress: bool = args.no_compression
+unknown_instrument: int = args.unknown_instrument or 20
 
 file = pynbs.read(path)
 
@@ -135,10 +150,29 @@ output = f"{round(file.header.tempo * 15)}\\{str(hold_time).removeprefix('0')}$"
 for inst in tracks:
     output += inst["name"]
     output += "|"
-    output += NUMBERS_LOOKUP[int(inst["muted"])]
-    output += NUMBERS_LOOKUP[int(inst["instrument"])]
-    output += NUMBERS_LOOKUP[int(inst["volume"])]
-    output += "".join(inst["notes"])
+    output += convert_84(int(inst["muted"]))
+    output += convert_84(int(inst["instrument"]))
+    output += convert_84(int(inst["volume"]))
+
+    notes = inst["notes"]
+    if compress:
+        while notes:
+            next_notes = notes[:5]
+            if len(next_notes) == 5 and len(set(next_notes)) == 1:
+                val = notes[0]
+                count = 0
+
+                while notes and notes[0] == val:
+                    count += 1
+                    notes.pop(0)
+
+                count84 = convert_84(count)
+                output += f"'{count84}~{val}"
+            else:
+                output += notes.pop(0)
+    else:
+        output += "".join(notes)
+
     output += "$"
 
 new_file_name = path.name.rsplit(".nbs", 1)[0] + ".smid.txt"

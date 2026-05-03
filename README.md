@@ -1,6 +1,6 @@
 # NBS to Scratch TabMidi
 
-A small program to convert NBS songs to the format for my [Scratch-based MIDI-Editor](https://scratch.mit.edu/projects/1311570943/).
+A small program to convert NBS songs to the format for my [Scratch-based MIDI-Editor](https://scratch.mit.edu/projects/1311570943/) ([Turbowarp](https://turbowarp.org/1311570943/fullscreen)).
 
 ## "Disclaimer"
 
@@ -9,8 +9,8 @@ Technically it can convert Rush E, but the song can't be fully imported in the S
 ## Usage
 
 0. Create a venv: `python -m venv nbs-venv`
-1. Activate the venv:
-   UNIX-based things: `source nbs-venv/bin/activate`
+1. Activate the venv:  
+   UNIX-based things: `source nbs-venv/bin/activate`  
    Windows: `nbs-venv\bin\Activate.ps1` in PowerShell
 2. Install the dependencies: `pip install -r requirements.txt`
 3. Grab a NBS song (maybe from [Note Block World](https://noteblock.world/))
@@ -38,3 +38,7 @@ Keep in mind, that there's an upper and lower limit. The script will try to fix 
 ### 4. My song is too quiet or loud
 
 Use the argument `--volume | -v` to multiply the volume of the song. `0.5` will half the volume, while `2.0` will double the volume.
+
+### 5. My song uses a lot of unknown instruments and they sound weird
+
+By default an unknown instrument uses the Scratch instrument 20. This can be changed using the argument `--unknown-instrument | -u`.
