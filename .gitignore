@@ -1,3 +1,4 @@
 *.smid.txt
 format.txt
 /venv
+__pycache__
