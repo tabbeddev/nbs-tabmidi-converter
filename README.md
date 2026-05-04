@@ -1,6 +1,6 @@
 # NBS to Scratch TabMidi
 
-A small program to convert NBS songs to the format for my [Scratch-based MIDI-Editor](https://scratch.mit.edu/projects/1311570943/) ([Turbowarp](https://turbowarp.org/1311570943/fullscreen)).
+A small program to convert [NBS songs](https://noteblock.studio/) to the format for my [Scratch-based MIDI-Editor](https://scratch.mit.edu/projects/1311570943/) ([Turbowarp](https://turbowarp.org/1311570943/fullscreen)).
 
 ## "Disclaimer"
 

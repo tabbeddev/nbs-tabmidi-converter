@@ -3,6 +3,7 @@ from typing import TypedDict
 from pathlib import Path
 import pynbs
 import argparse
+from colors import *
 
 INSTRUMENT_LOOKUP = {
     0: 1,
@@ -32,26 +33,37 @@ class MyInstrument(TypedDict):
     notes: list[str]
 
 
+def is_array_unique(array: list) -> bool:
+    return len(set(array)) == 1
+
+
 def get_mapped_instrument(instr: int):
+    global unknown_found
+
     if instr > 15:
+        unknown_found += 1
         return unknown_instrument
     return INSTRUMENT_LOOKUP[instr]
+
+
+def transform_volume(vol: int):
+    return max(round(vol / 100 * 13 * volume_factor), 1)
 
 
 def get_or_create_first_free_layer(tick: int, instrument: int, volume: int):
     for instr in tracks:
         if (
             instr["instrument"] == get_mapped_instrument(instrument)
-            and instr["volume"] == round(volume / 100 * 13 * volume_factor)
+            and instr["volume"] == transform_volume(volume)
             and (len(instr["notes"]) <= tick or instr["notes"][tick] == " ")
         ):
             return instr
 
     instr: MyInstrument = {
         "instrument": get_mapped_instrument(instrument),
-        "volume": round(volume / 100 * 13 * volume_factor),
+        "volume": transform_volume(volume),
         "muted": False,
-        "name": "Converted layer",
+        "name": "Converted layer " + str(len(tracks) + 1),
         "notes": [],
     }
     tracks.append(instr)
@@ -59,17 +71,20 @@ def get_or_create_first_free_layer(tick: int, instrument: int, volume: int):
 
 
 def insert_note(instrument: MyInstrument, tick: int, key: int):
+    global low_found
+    global high_found
+
     while len(instrument["notes"]) <= tick:
         instrument["notes"].append(" ")
     note = key - 3 + transpose_factor
 
     if note > 83:
-        print(f"Upper limit hit with {note} on tick {tick}")
+        high_found += 1
         while note > 83:
             note -= 12
 
     if note < 12:
-        print(f"Lower limit hit with {note} on tick {tick}")
+        low_found += 1
         while note < 0:
             note += 12
     instrument["notes"][tick] = convert_84(note)
@@ -129,6 +144,10 @@ cut_off: int | None = args.limit
 compress: bool = args.no_compression
 unknown_instrument: int = args.unknown_instrument or 20
 
+unknown_found = 0
+low_found = 0
+high_found = 0
+
 file = pynbs.read(path)
 
 for tick, chord in file:
@@ -146,7 +165,7 @@ for tick, chord in file:
         )
         insert_note(inst, tick, note.key)
 
-output = f"{round(file.header.tempo * 15)}\\{str(hold_time).removeprefix('0')}$"
+output = f"{round(file.header.tempo * 15)}\\{hold_time}$"
 for inst in tracks:
     output += inst["name"]
     output += "|"
@@ -157,19 +176,18 @@ for inst in tracks:
     notes = inst["notes"]
     if compress:
         while notes:
-            next_notes = notes[:5]
-            if len(next_notes) == 5 and len(set(next_notes)) == 1:
-                val = notes[0]
-                count = 0
+            val = notes[0]
+            count = 0
 
-                while notes and notes[0] == val:
-                    count += 1
-                    notes.pop(0)
+            while notes and notes[0] == val:
+                count += 1
+                notes.pop(0)
 
+            if count < 5:
+                output += count * val
+            else:
                 count84 = convert_84(count)
                 output += f"'{count84}~{val}"
-            else:
-                output += notes.pop(0)
     else:
         output += "".join(notes)
 
@@ -180,4 +198,40 @@ new_file_name = path.name.rsplit(".nbs", 1)[0] + ".smid.txt"
 with open(new_file_name, "w") as f:
     f.write(output)
 
-print("Saved at:", new_file_name)
+if unknown_found:
+    print(
+        Fore.YELLOW
+        + f"{unknown_found} notes were using an custom instrument. Those have been replaced with the Scratch instrument number {unknown_instrument}"
+        + Style.RESET_ALL
+    )
+
+if low_found:
+    print(
+        Fore.YELLOW
+        + f"{low_found} notes were outside the lower limit. Those have been transposed up individually, which might sound off"
+        + Style.RESET_ALL
+    )
+
+if high_found:
+    print(
+        Fore.YELLOW
+        + f"{high_found} notes were outside the upper limit. Those have been transposed down individually, which might sound off"
+        + Style.RESET_ALL
+    )
+
+if low_found or high_found:
+    print(
+        Fore.BLUE
+        + "Hint: To transpose the full song use -t | --transpose"
+        + Style.RESET_ALL
+    )
+
+print(Fore.GREEN + "Saved at:", new_file_name)
+print("Produced tracks: " + str(len(tracks)))
+
+length = min(cut_off, file.header.song_length) if cut_off else file.header.song_length
+
+print(
+    f"Length: {length} notes / {round(length * (1 / file.header.tempo))} seconds"
+    + Style.RESET_ALL
+)
