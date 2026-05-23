@@ -10,4 +10,4 @@
 - Megalovania: `-v 0.8 -u 1`
 - Zootopia 2 Teaser Theme: _stock_
 - Sweden - Tropical Mix `-v 0.3 -u 1`
-- Tetoris: `-m -M "14:3"`
+- Tetoris: `-M "14:3"` (only works on TurboWarp due to list limit)
