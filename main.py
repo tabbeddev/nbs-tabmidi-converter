@@ -8,9 +8,9 @@ from colors import *
 INSTRUMENT_LOOKUP = {
     0: 1,
     1: 6,
-    2: 6,  # TODO: replace with drumkit layer when it exists
-    3: 6,  # TODO: replace with drumkit layer when it exists
-    4: 6,  # TODO: replace with drumkit layer when it exists
+    2: 6,
+    3: 6,
+    4: 6,
     5: 4,
     6: 14,
     7: 19,
@@ -22,6 +22,12 @@ INSTRUMENT_LOOKUP = {
     13: 10,
     14: 17,
     15: 2,
+}
+
+DRUMKIT_LOOKUP = {
+    2: 2,
+    3: 1,
+    4: 5,
 }
 
 
@@ -37,10 +43,16 @@ def is_array_unique(array: list) -> bool:
     return len(set(array)) == 1
 
 
+def round_volume(vol: int):
+    if vol >= 50:
+        return 100
+    return 50
+
+
 def get_mapped_instrument(instr: int):
     global unknown_found
 
-    if instr > 15:
+    if instr not in INSTRUMENT_LOOKUP:
         unknown_found += 1
         return unknown_instrument
     return INSTRUMENT_LOOKUP[instr]
@@ -53,15 +65,15 @@ def transform_volume(vol: int):
 def get_or_create_first_free_layer(tick: int, instrument: int, volume: int):
     for instr in tracks:
         if (
-            instr["instrument"] == get_mapped_instrument(instrument)
-            and instr["volume"] == transform_volume(volume)
+            instr["instrument"] == instrument
+            and instr["volume"] == volume
             and (len(instr["notes"]) <= tick or instr["notes"][tick] == " ")
         ):
             return instr
 
     instr: MyInstrument = {
-        "instrument": get_mapped_instrument(instrument),
-        "volume": transform_volume(volume),
+        "instrument": instrument,
+        "volume": volume,
         "muted": False,
         "name": "Converted layer " + str(len(tracks) + 1),
         "notes": [],
@@ -70,13 +82,12 @@ def get_or_create_first_free_layer(tick: int, instrument: int, volume: int):
     return instr
 
 
-def insert_note(instrument: MyInstrument, tick: int, key: int):
+def insert_note(instrument: MyInstrument, tick: int, note: int):
     global low_found
     global high_found
 
     while len(instrument["notes"]) <= tick:
         instrument["notes"].append(" ")
-    note = key - 3 + transpose_factor
 
     if note > 83:
         high_found += 1
@@ -127,6 +138,30 @@ parser.add_argument(
     help="Multiplies the volume by this factor. Use when the result is way too loud",
 )
 parser.add_argument(
+    "-m",
+    "--monotone",
+    action="store_true",
+    help="Ignores the specified volumes and use always 100%% (use --volume to change that). Use when the results has too many tracks",
+)
+parser.add_argument(
+    "-M",
+    "--map",
+    type=str,
+    help='Assign a Minecraft Instrument a custom scratch instrument. Format: "1:15;3:17"',
+)
+parser.add_argument(
+    "-d",
+    "--no-drumkit",
+    action="store_false",
+    help="Don't convert certain instruments to a drumkit layer",
+)
+parser.add_argument(
+    "-D",
+    "--drumkit-map",
+    type=str,
+    help='Assign a Minecraft Instrument a custom scratch drum. Pitches can\'t be converted. Format: "1:15;3:17"',
+)
+parser.add_argument(
     "-C",
     "--no-compression",
     action="store_false",
@@ -140,9 +175,32 @@ path: Path = args.path
 transpose_factor: int = (args.transpose or 0) * 12
 hold_time: float = args.hold or 0.25
 volume_factor: float = args.volume or 1
+monotone: bool = args.monotone
 cut_off: int | None = args.limit
 compress: bool = args.no_compression
 unknown_instrument: int = args.unknown_instrument or 20
+mapping: str | None = args.map
+process_drumkit: bool = args.no_drumkit
+drum_mapping: str | None = args.drumkit_map
+
+
+def parse_mapping(map: str | None, target: dict[int, int], type: str = "instrument"):
+    if not map:
+        return
+    for map in map.split(";"):
+        mc, scr = map.split(":")
+        if not (mc and scr):
+            continue
+
+        print(
+            f"Mapped Minecraft instrument {mc} to Scratch {type} {scr} instead of {target[int(mc)]}"
+        )
+        target[int(mc)] = int(scr)
+
+
+parse_mapping(mapping, INSTRUMENT_LOOKUP)
+if process_drumkit:
+    parse_mapping(drum_mapping, DRUMKIT_LOOKUP, "drum")
 
 unknown_found = 0
 low_found = 0
@@ -160,10 +218,25 @@ for tick, chord in file:
     chord: list[pynbs.Note] = chord
 
     for note in chord:
-        inst = get_or_create_first_free_layer(
-            tick, note.instrument, file.layers[note.layer].volume
+        layer = file.layers[note.layer]
+
+        if layer.lock:
+            continue
+
+        l_volume = (layer.volume * note.velocity) // 100
+        volume = round_volume(l_volume) if monotone else l_volume
+
+        instrument = get_mapped_instrument(note.instrument)
+        key = note.key - 3 + transpose_factor
+
+        if process_drumkit and note.instrument in DRUMKIT_LOOKUP:
+            instrument = 22
+            key = DRUMKIT_LOOKUP[note.instrument]
+
+        track = get_or_create_first_free_layer(
+            tick, instrument, transform_volume(volume)
         )
-        insert_note(inst, tick, note.key)
+        insert_note(track, tick, key)
 
 output = f"{round(file.header.tempo * 15)}\\{hold_time}$"
 for inst in tracks:
@@ -198,6 +271,13 @@ new_file_name = path.name.rsplit(".nbs", 1)[0] + ".smid.txt"
 with open(new_file_name, "w") as f:
     f.write(output)
 
+if len(tracks) >= 100:
+    print(
+        Fore.MAGENTA
+        + f"This song is using {len(tracks)} tracks, which could cause problems with Scratches Clone Limit"
+        + Style.RESET_ALL
+    )
+
 if unknown_found:
     print(
         Fore.YELLOW
@@ -223,6 +303,12 @@ if low_found or high_found:
     print(
         Fore.BLUE
         + "Hint: To transpose the full song use -t | --transpose"
+        + Style.RESET_ALL
+    )
+if len(tracks) >= 100:
+    print(
+        Fore.BLUE
+        + "Hint: To ignore the volume to save on tracks use -m | --monotone"
         + Style.RESET_ALL
     )
 
