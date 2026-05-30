@@ -11,7 +11,7 @@ Technically it can convert Rush E, but the song can't be fully imported in the S
 0. Create a venv: `python -m venv nbs-venv`
 1. Activate the venv:  
    UNIX-based things: `source nbs-venv/bin/activate`  
-   Windows: `nbs-venv\bin\Activate.ps1` in PowerShell
+   Windows: `nbs-venv\Scripts\Activate.ps1` in PowerShell
 2. Install the dependencies: `pip install -r requirements.txt`
 3. Grab a NBS song (maybe from [Note Block World](https://noteblock.world/))
 4. Convert it: `python main.py path/to/my/song.nbs`
